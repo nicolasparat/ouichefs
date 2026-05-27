@@ -55,8 +55,17 @@ struct ouichefs_superblock {
 	char padding[4064]; /* Padding to match block size */
 };
 
+struct ouichefs_extent {
+	uint32_t start;
+	uint32_t count;
+};
+
+// struct ouichefs_file_index_block {
+// 	uint32_t blocks[OUICHEFS_BLOCK_SIZE >> 2];
+// };
+
 struct ouichefs_file_index_block {
-	uint32_t blocks[OUICHEFS_BLOCK_SIZE >> 2];
+	struct ouichefs_extent extents[OUICHEFS_BLOCK_SIZE / sizeof(struct ouichefs_extent)];
 };
 
 struct ouichefs_dir_block {

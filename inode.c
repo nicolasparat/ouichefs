@@ -355,21 +355,46 @@ static int ouichefs_unlink(struct inode *dir, struct dentry *dentry)
 	file_block = (struct ouichefs_file_index_block *)bh->b_data;
 	if (S_ISDIR(inode->i_mode))
 		goto scrub;
-	for (i = 0; i < inode->i_blocks - 1; i++) {
-		char *block;
+// 	for (i = 0; i < inode->i_blocks - 1; i++) {
+// 		char *block;
 
-		if (!file_block->blocks[i])
-			continue;
+// 		if (!file_block->blocks[i])
+// 			continue;
 
-    bh2 = sb_bread(sb, le32_to_cpu(file_block->blocks[i]));
-		if (!bh2)
-			goto put_block;
-		block = (char *)bh2->b_data;
-		memset(block, 0, OUICHEFS_BLOCK_SIZE);
-		mark_buffer_dirty(bh2);
-		brelse(bh2);
-put_block:
-		put_block(sbi, le32_to_cpu(file_block->blocks[i]));
+//     bh2 = sb_bread(sb, le32_to_cpu(file_block->blocks[i]));
+// 		if (!bh2)
+// 			goto put_block;
+// 		block = (char *)bh2->b_data;
+// 		memset(block, 0, OUICHEFS_BLOCK_SIZE);
+// 		mark_buffer_dirty(bh2);
+// 		brelse(bh2);
+// put_block:
+// 		put_block(sbi, le32_to_cpu(file_block->blocks[i]));
+// 	}
+
+	// Version de la boucle modifiée pour gérer les extents
+	for (i = 0; i < OUICHEFS_MAX_EXTENTS; i++) {
+	    uint32_t start = file_block->extents[i].start;
+	    uint32_t count = file_block->extents[i].count;
+	    uint32_t j;
+
+	    if (count == 0)
+	        break;
+
+		/* trou, rien à libérer */
+	    if (start == 0) 
+	        continue;
+
+	    for (j = 0; j < count; j++) {
+	        bh2 = sb_bread(sb, start + j);
+	        if (!bh2)
+	            goto put_blk;
+	        memset(bh2->b_data, 0, OUICHEFS_BLOCK_SIZE);
+	        mark_buffer_dirty(bh2);
+	        brelse(bh2);
+put_blk:
+	        put_block(sbi, start + j);
+	    }
 	}
 
 scrub:

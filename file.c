@@ -33,7 +33,8 @@ static int ouichefs_file_get_block(struct inode *inode, sector_t iblock,
 	int ret = 0, bno;
 
 	/* If block number exceeds filesize, fail */
-	if (iblock >= OUICHEFS_BLOCK_SIZE >> 2)
+	// if (iblock >= OUICHEFS_BLOCK_SIZE >> 2)
+	if (iblock >= OUICHEFS_MAX_EXTENTS)
 		return -EFBIG;
 
 	/* Read index block from disk */
@@ -46,20 +47,36 @@ static int ouichefs_file_get_block(struct inode *inode, sector_t iblock,
 	 * Check if iblock is already allocated. If not and create is true,
 	 * allocate it. Else, get the physical block number.
 	 */
-	if (index->blocks[iblock] == 0) {
-		if (!create) {
-			ret = 0;
-			goto brelse_index;
-		}
-		bno = get_free_block(sbi);
-		if (!bno) {
-			ret = -ENOSPC;
-			goto brelse_index;
-		}
-		index->blocks[iblock] = cpu_to_le32(bno);
-		mark_buffer_dirty(bh_index);
+	// if (index->blocks[iblock] == 0) {
+	// 	if (!create) {
+	// 		ret = 0;
+	// 		goto brelse_index;
+	// 	}
+	// 	bno = get_free_block(sbi);
+	// 	if (!bno) {
+	// 		ret = -ENOSPC;
+	// 		goto brelse_index;
+	// 	}
+	// 	index->blocks[iblock] = cpu_to_le32(bno);
+	// 	mark_buffer_dirty(bh_index);
+	// } else {
+	// 	bno = le32_to_cpu(index->blocks[iblock]);
+	// }
+	if (index->extents[iblock].count == 0) {
+	    if (!create) {
+	        ret = 0;
+	        goto brelse_index;
+	    }
+	    bno = get_free_block(sbi);
+	    if (!bno) {
+	        ret = -ENOSPC;
+	        goto brelse_index;
+	    }
+	    index->extents[iblock].start = bno;
+	    index->extents[iblock].count = 1;
+	    mark_buffer_dirty(bh_index);
 	} else {
-		bno = le32_to_cpu(index->blocks[iblock]);
+	    bno = index->extents[iblock].start;
 	}
 
 	/* Map the physical block to the given buffer_head */
@@ -206,7 +223,9 @@ static int ouichefs_open(struct inode *inode, struct file *file)
 		struct ouichefs_inode_info *ci = OUICHEFS_INODE(inode);
 		struct ouichefs_file_index_block *index;
 		struct buffer_head *bh_index;
-		sector_t iblock;
+		// sector_t iblock;
+		int i;
+		uint32_t j;
 
 		/* Read index block from disk */
 		bh_index = sb_bread(sb, ci->index_block);
@@ -214,13 +233,27 @@ static int ouichefs_open(struct inode *inode, struct file *file)
 			return -EIO;
 		index = (struct ouichefs_file_index_block *)bh_index->b_data;
 
-		for (iblock = 0; index->blocks[iblock] != 0; iblock++) {
-			put_block(sbi, le32_to_cpu(index->blocks[iblock]));
-			index->blocks[iblock] = 0;
+		// for (iblock = 0; index->blocks[iblock] != 0; iblock++) {
+		// 	put_block(sbi, le32_to_cpu(index->blocks[iblock]));
+		// 	index->blocks[iblock] = 0;
+		// }
+
+		// Loop modifié pour gérer les extents
+		for (i = 0; i < OUICHEFS_MAX_EXTENTS; i++) {
+			uint32_t start = index->extents[i].start;
+			uint32_t count = index->extents[i].count;
+
+			if (count == 0)
+				break;
+			if (start == 0) /* trou, rien à libérer */
+				continue;
+			for (j = 0; j < count; j++)
+				put_block(sbi, start + j);
 		}
+
+		memset(index->extents, 0, OUICHEFS_BLOCK_SIZE);
 		inode->i_size = 0;
 		inode->i_blocks = 1;
-
 		mark_buffer_dirty(bh_index);
 		brelse(bh_index);
 	}
@@ -328,19 +361,24 @@ static ssize_t ouichefs_write(struct file *file, const char __user *buf,
 
 		// Check par sécurité, normalement jamais utilisé car 
 		// le premier check l'aura catché avant
-        if (logical_block >= OUICHEFS_BLOCK_SIZE >> 2) {
+        // if (logical_block >= OUICHEFS_BLOCK_SIZE >> 2) {
+		if (logical_block >= OUICHEFS_MAX_EXTENTS) {  /* = 512 */
             total = total ? total : -EFBIG;
             break;
         }
 
-        bno = le32_to_cpu(index->blocks[logical_block]);
+        // bno = le32_to_cpu(index->blocks[logical_block]);
+		bno = index->extents[logical_block].start;
         if (!bno) {
             bno = get_free_block(sbi);
             if (!bno) {
                 total = total ? total : -ENOSPC;
                 break;
             }
-            index->blocks[logical_block] = cpu_to_le32(bno);
+            // index->blocks[logical_block] = cpu_to_le32(bno);
+			index->extents[logical_block].start = bno;
+			index->extents[logical_block].count = 1;
+
             mark_buffer_dirty(bh_index);
         }
 

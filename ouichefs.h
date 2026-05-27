@@ -91,7 +91,6 @@ struct ouichefs_sb_info {
 struct ouichefs_file_index_block {
 	// __le32 blocks[OUICHEFS_BLOCK_SIZE >> 2];
 	struct ouichefs_extent extents[OUICHEFS_MAX_EXTENTS];
-
 };
 
 struct ouichefs_dir_block {
