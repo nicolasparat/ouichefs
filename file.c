@@ -15,6 +15,7 @@
 
 #include "ouichefs.h"
 #include "bitmap.h"
+#include "ioctl.h"
 
 /*
  * Map the buffer_head passed in argument with the iblock-th block of the file
@@ -387,6 +388,48 @@ static ssize_t ouichefs_write(struct file *file, const char __user *buf,
     return total;
 }
 
+static long ouichefs_ioctl(struct file *file, unsigned int cmd,
+			   unsigned long arg)
+{
+	struct inode *inode = file_inode(file);
+	struct ouichefs_inode_info *ci = OUICHEFS_INODE(inode);
+	struct super_block *sb = inode->i_sb;
+	struct buffer_head *bh;
+	struct ouichefs_file_index_block *index;
+	int i, n = 0;
+
+	switch (cmd) {
+	case OUICHEFS_IOC_GET_EXTENTS:
+		bh = sb_bread(sb, ci->index_block);
+		if (!bh)
+			return -EIO;
+		index = (struct ouichefs_file_index_block *)bh->b_data;
+
+		/* Nombre d'extents valides */
+		for (i = 0; i < OUICHEFS_MAX_EXTENTS; i++) {
+			if (index->extents[i].count == 0)
+				break;
+			n++;
+		}
+
+		pr_info("extents for inode %lu: %d extent(s)\n",
+			inode->i_ino, n);
+		for (i = 0; i < n; i++) {
+			uint32_t s = index->extents[i].start;
+			uint32_t c = index->extents[i].count;
+
+			pr_info("  [%d] start=%u count=%u (blocks %u-%u)\n",
+				i, s, c, s, s + c - 1);
+		}
+
+		brelse(bh);
+		return 0;
+
+	default:
+		return -ENOTTY;
+	}
+}
+
 const struct file_operations ouichefs_file_ops = {
 	.owner = THIS_MODULE,
 	.open = ouichefs_open,
@@ -394,4 +437,5 @@ const struct file_operations ouichefs_file_ops = {
 	.read = ouichefs_read,
 	.write = ouichefs_write,
 	.fsync = generic_file_fsync,
+	.unlocked_ioctl = ouichefs_ioctl,
 };
