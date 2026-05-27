@@ -297,13 +297,14 @@ static ssize_t ouichefs_write(struct file *file, const char __user *buf,
 	uint32_t nr_allocs = 0;
 
 	/* Curseur à la fin du fichier si on est en mode APPEND */
-    if (file->f_flags & O_APPEND)
-        *ppos = inode->i_size;
+    if (file->f_flags & O_APPEND) {
+    	*ppos = inode->i_size;
+	}
 
 	/* Check if the write can be completed (enough space?) */
 	if (*ppos > OUICHEFS_MAX_FILESIZE)
 		return -ENOSPC;
-	nr_allocs = max(pos + len, file->f_inode->i_size) / OUICHEFS_BLOCK_SIZE;
+	nr_allocs = max(*ppos + len, file->f_inode->i_size) / OUICHEFS_BLOCK_SIZE;
 	if (nr_allocs > file->f_inode->i_blocks - 1)
 		nr_allocs -= file->f_inode->i_blocks - 1;
 	else
@@ -387,7 +388,7 @@ const struct file_operations ouichefs_file_ops = {
 	.owner = THIS_MODULE,
 	.open = ouichefs_open,
 	.llseek = generic_file_llseek,
-	.read_iter = ouichefs_read,
-	.write_iter = ouichefs_write,
+	.read = ouichefs_read,
+	.write = ouichefs_write,
 	.fsync = generic_file_fsync,
 };
