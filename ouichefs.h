@@ -14,7 +14,8 @@
 #define OUICHEFS_SB_BLOCK_NR 0
 
 #define OUICHEFS_BLOCK_SIZE (1 << 12) /* 4 KiB */
-#define OUICHEFS_MAX_FILESIZE (1 << 22) /* 4 MiB */
+// #define OUICHEFS_MAX_FILESIZE (1 << 22) /* 4 MiB */
+#define OUICHEFS_MAX_FILESIZE (1 << 21) /* 2 MiB */
 #define OUICHEFS_FILENAME_LEN 28
 #define OUICHEFS_MAX_SUBFILES 128
 
@@ -54,8 +55,18 @@ struct ouichefs_inode {
 
 struct ouichefs_inode_info {
 	uint32_t index_block;
+	// Champs pour plus tard, il pourrait falloir les modifier.
+	uint32_t i_reserved_start;
+	uint32_t i_reserved_count;
 	struct inode vfs_inode;
 };
+
+struct ouichefs_extent {
+	uint32_t start; /* first physical block number of the run */
+	uint32_t count; /* number of consecutive blocks in the run */
+};
+
+#define OUICHEFS_MAX_EXTENTS (OUICHEFS_BLOCK_SIZE / sizeof(struct ouichefs_extent)) /* (4096 / 8 = 512) */
 
 #define OUICHEFS_INODES_PER_BLOCK \
 	(OUICHEFS_BLOCK_SIZE / sizeof(struct ouichefs_inode))
@@ -78,7 +89,9 @@ struct ouichefs_sb_info {
 };
 
 struct ouichefs_file_index_block {
-	__le32 blocks[OUICHEFS_BLOCK_SIZE >> 2];
+	// __le32 blocks[OUICHEFS_BLOCK_SIZE >> 2];
+	struct ouichefs_extent extents[OUICHEFS_MAX_EXTENTS];
+
 };
 
 struct ouichefs_dir_block {
