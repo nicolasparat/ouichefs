@@ -294,10 +294,22 @@ static ssize_t ouichefs_write(struct file *file, const char __user *buf,
     struct ouichefs_file_index_block *index;
     ssize_t total = 0;
     uint32_t logical_block, block_offset, to_copy, bno;
+	uint32_t nr_allocs = 0;
 
-    /* Curseur à la fin du fichier si on est en mode APPEND */
+	/* Curseur à la fin du fichier si on est en mode APPEND */
     if (file->f_flags & O_APPEND)
         *ppos = inode->i_size;
+
+	/* Check if the write can be completed (enough space?) */
+	if (*ppos > OUICHEFS_MAX_FILESIZE)
+		return -ENOSPC;
+	nr_allocs = max(pos + len, file->f_inode->i_size) / OUICHEFS_BLOCK_SIZE;
+	if (nr_allocs > file->f_inode->i_blocks - 1)
+		nr_allocs -= file->f_inode->i_blocks - 1;
+	else
+		nr_allocs = 0;
+	if (nr_allocs > sbi->nr_free_blocks)
+		return -ENOSPC;
 
     bh_index = sb_bread(sb, ci->index_block);
     if (!bh_index)
@@ -309,6 +321,8 @@ static ssize_t ouichefs_write(struct file *file, const char __user *buf,
         block_offset  = *ppos % OUICHEFS_BLOCK_SIZE;
         to_copy = min_t(size_t, len, OUICHEFS_BLOCK_SIZE - block_offset);
 
+		// Check par sécurité, normalement jamais utilisé car 
+		// le premier check l'aura catché avant
         if (logical_block >= OUICHEFS_BLOCK_SIZE >> 2) {
             total = total ? total : -EFBIG;
             break;
@@ -316,7 +330,6 @@ static ssize_t ouichefs_write(struct file *file, const char __user *buf,
 
         bno = le32_to_cpu(index->blocks[logical_block]);
         if (!bno) {
-            /* Allocate a new block */
             bno = get_free_block(sbi);
             if (!bno) {
                 total = total ? total : -ENOSPC;
@@ -332,7 +345,8 @@ static ssize_t ouichefs_write(struct file *file, const char __user *buf,
             break;
         }
 
-        /* Zero-fill if we're writing past the current block end (hole) */
+		// On ne remplit pas les blocs "skippés" actuellement, mais il faudra sûrement le faire ensuite.
+		/* Zero-fill if we're writing past the current block end (hole) */
         // if (block_offset > 0 && *ppos > inode->i_size) {
         //     uint32_t gap = min_t(uint32_t, block_offset, inode->i_size % OUICHEFS_BLOCK_SIZE);
         //     /* memset the gap to zero — simplified, you may need to be more careful */
