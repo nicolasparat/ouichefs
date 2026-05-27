@@ -227,11 +227,153 @@ static int ouichefs_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
+static ssize_t ouichefs_read(struct file *file, char __user *buf,
+                              size_t len, loff_t *ppos)
+{
+    struct inode *inode = file_inode(file);
+    struct ouichefs_inode_info *ci = OUICHEFS_INODE(inode);
+    struct super_block *sb = inode->i_sb;
+    struct buffer_head *bh_index, *bh_data;
+    struct ouichefs_file_index_block *index;
+    ssize_t total = 0;
+    uint32_t logical_block, block_offset, to_copy;
+    uint32_t phys_block;
+
+    /* Rien à lire */
+    if (*ppos >= inode->i_size)
+        return 0;
+
+    /* Capper la longueur de ce qu'on lira */
+    len = min_t(size_t, len, inode->i_size - *ppos);
+
+    bh_index = sb_bread(sb, ci->index_block);
+    if (!bh_index)
+        return -EIO;
+    index = (struct ouichefs_file_index_block *)bh_index->b_data;
+
+    while (len > 0) {
+        logical_block = *ppos / OUICHEFS_BLOCK_SIZE;
+        block_offset  = *ppos % OUICHEFS_BLOCK_SIZE;
+        to_copy = min_t(size_t, len, OUICHEFS_BLOCK_SIZE - block_offset);
+
+        phys_block = le32_to_cpu(index->blocks[logical_block]);
+        if (!phys_block)
+            break;
+
+        bh_data = sb_bread(sb, phys_block);
+        if (!bh_data) {
+            total = total ? total : -EIO;
+            break;
+        }
+
+        if (copy_to_user(buf + total, bh_data->b_data + block_offset,
+                         to_copy)) {
+            brelse(bh_data);
+            total = total ? total : -EFAULT;
+            break;
+        }
+        brelse(bh_data);
+
+        *ppos += to_copy;
+        total += to_copy;
+        len   -= to_copy;
+    }
+
+    brelse(bh_index);
+    return total;
+}
+
+static ssize_t ouichefs_write(struct file *file, const char __user *buf,
+                               size_t len, loff_t *ppos)
+{
+    struct inode *inode = file_inode(file);
+    struct ouichefs_inode_info *ci = OUICHEFS_INODE(inode);
+    struct ouichefs_sb_info *sbi = OUICHEFS_SB(inode->i_sb);
+    struct super_block *sb = inode->i_sb;
+    struct buffer_head *bh_index, *bh_data;
+    struct ouichefs_file_index_block *index;
+    ssize_t total = 0;
+    uint32_t logical_block, block_offset, to_copy, bno;
+
+    /* Curseur à la fin du fichier si on est en mode APPEND */
+    if (file->f_flags & O_APPEND)
+        *ppos = inode->i_size;
+
+    bh_index = sb_bread(sb, ci->index_block);
+    if (!bh_index)
+        return -EIO;
+    index = (struct ouichefs_file_index_block *)bh_index->b_data;
+
+    while (len > 0) {
+        logical_block = *ppos / OUICHEFS_BLOCK_SIZE;
+        block_offset  = *ppos % OUICHEFS_BLOCK_SIZE;
+        to_copy = min_t(size_t, len, OUICHEFS_BLOCK_SIZE - block_offset);
+
+        if (logical_block >= OUICHEFS_BLOCK_SIZE >> 2) {
+            total = total ? total : -EFBIG;
+            break;
+        }
+
+        bno = le32_to_cpu(index->blocks[logical_block]);
+        if (!bno) {
+            /* Allocate a new block */
+            bno = get_free_block(sbi);
+            if (!bno) {
+                total = total ? total : -ENOSPC;
+                break;
+            }
+            index->blocks[logical_block] = cpu_to_le32(bno);
+            mark_buffer_dirty(bh_index);
+        }
+
+        bh_data = sb_bread(sb, bno);
+        if (!bh_data) {
+            total = total ? total : -EIO;
+            break;
+        }
+
+        /* Zero-fill if we're writing past the current block end (hole) */
+        // if (block_offset > 0 && *ppos > inode->i_size) {
+        //     uint32_t gap = min_t(uint32_t, block_offset, inode->i_size % OUICHEFS_BLOCK_SIZE);
+        //     /* memset the gap to zero — simplified, you may need to be more careful */
+        // }
+
+        if (copy_from_user(bh_data->b_data + block_offset, buf + total, to_copy)) {
+            brelse(bh_data);
+            total = total ? total : -EFAULT;
+            break;
+        }
+        mark_buffer_dirty(bh_data);
+        sync_dirty_buffer(bh_data);
+        brelse(bh_data);
+
+        *ppos += to_copy;
+        total += to_copy;
+        len   -= to_copy;
+
+        if (*ppos > inode->i_size) {
+            inode->i_size = *ppos;
+            /* i_blocks = nb data blocks + 1 (index block) */
+            inode->i_blocks = (roundup(inode->i_size, OUICHEFS_BLOCK_SIZE)
+                               / OUICHEFS_BLOCK_SIZE) + 1;
+        }
+    }
+
+    sync_dirty_buffer(bh_index);
+    brelse(bh_index);
+
+    if (total > 0) {
+        inode->i_mtime = inode->i_ctime = current_time(inode);
+        mark_inode_dirty(inode);
+    }
+    return total;
+}
+
 const struct file_operations ouichefs_file_ops = {
 	.owner = THIS_MODULE,
 	.open = ouichefs_open,
 	.llseek = generic_file_llseek,
-	.read_iter = generic_file_read_iter,
-	.write_iter = generic_file_write_iter,
+	.read_iter = ouichefs_read,
+	.write_iter = ouichefs_write,
 	.fsync = generic_file_fsync,
 };
