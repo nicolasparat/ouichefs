@@ -305,7 +305,7 @@ static ssize_t ouichefs_write(struct file *file, const char __user *buf,
 	if (*ppos > OUICHEFS_MAX_FILESIZE)
 		return -ENOSPC;
 
-	__le32 end_pos;
+	loff_t end_pos;
 	end_pos = *ppos + len;
 	nr_allocs = max(end_pos, file->f_inode->i_size) / OUICHEFS_BLOCK_SIZE;
 	if (nr_allocs > file->f_inode->i_blocks - 1)
