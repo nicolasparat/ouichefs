@@ -737,6 +737,7 @@ static int ouichefs_release(struct inode *inode, struct file *file)
             put_block(sbi, ci->i_reserved_start + i);
         ci->i_reserved_start = 0;
         ci->i_reserved_count = 0;
+		pr_info("y : %u, %u\n", ci->i_reserved_start, ci->i_reserved_count);
     }
     return 0;
 }
