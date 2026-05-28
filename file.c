@@ -7,6 +7,9 @@
 
 #define pr_fmt(fmt) "%s:%s: " fmt, KBUILD_MODNAME, __func__
 
+// Possbilement à modifier par la suite
+#define OUICHEFS_HOLE_BLOCK 0xFFFFFFFFU
+
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/fs.h>
@@ -261,6 +264,33 @@ static int ouichefs_open(struct inode *inode, struct file *file)
 	return 0;
 }
 
+static uint32_t ouichefs_extent_get_block(struct ouichefs_extent *extents,
+					  uint32_t logical_block)
+{
+	uint32_t i, offset = 0;
+
+	for (i = 0; i < OUICHEFS_MAX_EXTENTS; i++) {
+		uint32_t start = extents[i].start;
+		uint32_t count = extents[i].count;
+
+		if (count == 0)
+			break;
+
+		/* Si le bloc logique est dans cet extent */
+		if (logical_block < offset + count) {
+			if (start == 0)
+				return OUICHEFS_HOLE_BLOCK;
+			return start + (logical_block - offset);
+		}
+
+		// Sinon on itère jusqu'à trouver le bon extent
+		offset += count;
+	}
+
+	/* au-delà de EOF */
+	return 0; 
+}
+
 static ssize_t ouichefs_read(struct file *file, char __user *buf,
                               size_t len, loff_t *ppos)
 {
@@ -290,9 +320,18 @@ static ssize_t ouichefs_read(struct file *file, char __user *buf,
         block_offset  = *ppos % OUICHEFS_BLOCK_SIZE;
         to_copy = min_t(size_t, len, OUICHEFS_BLOCK_SIZE - block_offset);
 
-        phys_block = le32_to_cpu(index->blocks[logical_block]);
-        if (!phys_block)
-            break;
+        // phys_block = le32_to_cpu(index->blocks[logical_block]);
+        // if (!phys_block)
+        //     break;
+
+		phys_block = ouichefs_extent_get_block(index->extents, logical_block);
+		if (phys_block == 0)
+			/* EOF ou bloc non alloué */
+		    break; 
+		if (phys_block == OUICHEFS_HOLE_BLOCK) {
+		    /* Trou. A gérer par la suite */
+		    break;
+		}
 
         bh_data = sb_bread(sb, phys_block);
         if (!bh_data) {
