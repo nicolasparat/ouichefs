@@ -725,7 +725,7 @@ static int ouichefs_release(struct inode *inode, struct file *file)
     struct ouichefs_sb_info *sbi = OUICHEFS_SB(inode->i_sb);
     uint32_t i;
 
-	pr_debug("Reservations at release (start - count) : %u - %u",
+	pr_info("Reservations at release (start - count) : %u - %u",
 		ci->i_reserved_start,
 		ci->i_reserved_count);
 
