@@ -20,6 +20,10 @@
 #include "bitmap.h"
 #include "ioctl.h"
 
+static uint32_t reservation_size = 8;
+module_param(reservation_size, uint, 0644);
+MODULE_PARM_DESC(reservation_size, "Block reservation window size");
+
 /*
  * Map the buffer_head passed in argument with the iblock-th block of the file
  * represented by inode. If the requested block is not allocated and create is
@@ -423,43 +427,128 @@ static int ouichefs_last_extent(struct ouichefs_extent *extents)
 
 /* On alloue un bloc avec get_free_block (équivalent de ouichefs_alloc_block de l'énoncé) et met à jour la liste d'extents.
  * Retourne le numéro de bloc physique alloué, ou 0 en cas d'échec. */
-static uint32_t ouichefs_append_block(struct super_block *sb,
-                                       struct ouichefs_extent *extents,
-									   uint32_t blocks_needed)
+// static uint32_t ouichefs_append_block(struct super_block *sb,
+//                                        struct ouichefs_extent *extents,
+// 									   uint32_t blocks_needed)
+// {
+//     struct ouichefs_sb_info *sbi = OUICHEFS_SB(sb);
+//     int last_idx;
+//     uint32_t start, got;
+
+//     got = ouichefs_alloc_contiguous(sb, blocks_needed, &start);
+//     if (!got)
+//         return 0;
+
+//     last_idx = ouichefs_last_extent(extents);
+
+//     /* Merge si contigu avec le dernier extent (et pas un trou) */
+//     if (last_idx >= 0 &&
+//         extents[last_idx].start != 0 &&
+// 		// Dans cette ligne, le 1er start est le champ de la struct, le 2ème start est la valeur retournée par ouichefs_alloc_contiguous
+// 		extents[last_idx].start + extents[last_idx].count == start) {
+//         extents[last_idx].count += got;
+// 	} else {
+// 		// Si ce n'est pas contigu, on alloue un nouvel extent
+
+// 		// Si on n'a pas assez d'extents pour l'écriture entière, on libère ceux qu'on vient d'allouer
+// 		if (last_idx + 1 >= OUICHEFS_MAX_EXTENTS) {
+//             uint32_t j;
+
+//             for (j = 0; j < got; j++)
+//                 put_block(sbi, start + j);
+//             return 0;
+//         }
+
+//         extents[last_idx + 1].start = start;
+//         extents[last_idx + 1].count = got;
+// 	}
+
+//     return start;
+// }
+
+/*
+ * Alloue le prochain bloc pour un write en utilisant la fenêtre de
+ * réservation. Si la réservation est épuisée, en alloue une nouvelle
+ * via ouichefs_alloc_contiguous. Déclenche le GC si nécessaire.
+ *
+ * Met à jour l'extent list et les champs de réservation de l'inode.
+ * Retourne le numéro de bloc physique à écrire, ou 0 en cas d'échec.
+ */
+static uint32_t ouichefs_get_next_block(struct super_block *sb,
+                                         struct ouichefs_inode_info *ci,
+                                         struct ouichefs_extent *extents)
 {
     struct ouichefs_sb_info *sbi = OUICHEFS_SB(sb);
+    uint32_t bno;
     int last_idx;
-    uint32_t start, got;
 
-    got = ouichefs_alloc_contiguous(sb, blocks_needed, &start);
-    if (!got)
-        return 0;
+	/* Consomme depuis la réservation existante */
+    if (ci->i_reserved_count > 0) {
+        bno = ci->i_reserved_start;
+        ci->i_reserved_start++;
+        ci->i_reserved_count--;
+    
+	/* Alloue une nouvelle réserve */
+    } else {
+        uint32_t start, got;
 
+        got = ouichefs_alloc_contiguous(sb, reservation_size, &start);
+        if (got == 0) {
+            ouichefs_gc(sb);
+            got = ouichefs_alloc_contiguous(sb, reservation_size, &start);
+            if (got == 0)
+                return 0;
+        }
+        bno = start;
+        /* Les blocs restants sont mis en réserve */
+        ci->i_reserved_start = start + 1;
+        ci->i_reserved_count = got - 1;
+    }
+
+    /* Met à jour la liste d'extents : merge ou nouveau slot */
     last_idx = ouichefs_last_extent(extents);
 
-    /* Merge si contigu avec le dernier extent (et pas un trou) */
+	/* Merge si contigu avec le dernier extent (et pas un trou) */
     if (last_idx >= 0 &&
         extents[last_idx].start != 0 &&
-		// Dans cette ligne, le 1er start est le champ de la struct, le 2ème start est la valeur retournée par ouichefs_alloc_contiguous
-		extents[last_idx].start + extents[last_idx].count == start) {
-        extents[last_idx].count += got;
-	} else {
+        extents[last_idx].start + extents[last_idx].count == bno) {
+        extents[last_idx].count++;
+    } else {
 		// Si ce n'est pas contigu, on alloue un nouvel extent
+        last_idx++;
 
-		// Si on n'a pas assez d'extents pour l'écriture entière, on libère ceux qu'on vient d'allouer
-		if (last_idx + 1 >= OUICHEFS_MAX_EXTENTS) {
-            uint32_t j;
-
-            for (j = 0; j < got; j++)
-                put_block(sbi, start + j);
+		// Si on n'a pas assez d'extents, on libère celui qu'on vient d'allouer
+        if (last_idx >= OUICHEFS_MAX_EXTENTS) {
+            put_block(sbi, bno);
             return 0;
         }
+        extents[last_idx].start = bno;
+        extents[last_idx].count = 1;
+    }
 
-        extents[last_idx + 1].start = start;
-        extents[last_idx + 1].count = got;
-	}
+    return bno;
+}
 
-    return start;
+static void ouichefs_gc(struct super_block *sb)
+{
+    struct ouichefs_sb_info *sbi = OUICHEFS_SB(sb);
+    struct inode *inode;
+
+    spin_lock(&sb->s_inode_list_lock);
+    list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
+        struct ouichefs_inode_info *ci = OUICHEFS_INODE(inode);
+        uint32_t i;
+
+        if (ci->i_reserved_count == 0)
+            continue;
+        for (i = 0; i < ci->i_reserved_count; i++)
+            put_block(sbi, ci->i_reserved_start + i);
+        ci->i_reserved_start = 0;
+        ci->i_reserved_count = 0;
+    }
+    spin_unlock(&sb->s_inode_list_lock);
+
+    /* TODO 1.8 : sbi->gc_runs++ */
 }
 
 static ssize_t ouichefs_write(struct file *file, const char __user *buf,
@@ -530,8 +619,8 @@ static ssize_t ouichefs_write(struct file *file, const char __user *buf,
 
         if (!bno) {
 			// Nombre de blocs nécessaires pour tout stocker - nombre de blocs déjà alloués
-    		uint32_t blocks_needed = DIV_ROUND_UP(*ppos + len, OUICHEFS_BLOCK_SIZE) - logical_block;
-    		bno = ouichefs_append_block(sb, index->extents, blocks_needed);
+    		// uint32_t blocks_needed = DIV_ROUND_UP(*ppos + len, OUICHEFS_BLOCK_SIZE) - logical_block;
+    		bno = ouichefs_get_next_block(sb, ci, index->extents);
             // bno = get_free_block(sbi);
 			// bno = ouichefs_append_block(sb, index->extents);
             if (!bno) {
@@ -630,6 +719,21 @@ static long ouichefs_ioctl(struct file *file, unsigned int cmd,
 	}
 }
 
+static int ouichefs_release(struct inode *inode, struct file *file)
+{
+    struct ouichefs_inode_info *ci = OUICHEFS_INODE(inode);
+    struct ouichefs_sb_info *sbi = OUICHEFS_SB(inode->i_sb);
+    uint32_t i;
+
+    if (ci->i_reserved_count > 0) {
+        for (i = 0; i < ci->i_reserved_count; i++)
+            put_block(sbi, ci->i_reserved_start + i);
+        ci->i_reserved_start = 0;
+        ci->i_reserved_count = 0;
+    }
+    return 0;
+}
+
 const struct file_operations ouichefs_file_ops = {
 	.owner = THIS_MODULE,
 	.open = ouichefs_open,
@@ -638,4 +742,5 @@ const struct file_operations ouichefs_file_ops = {
 	.write = ouichefs_write,
 	.fsync = generic_file_fsync,
 	.unlocked_ioctl = ouichefs_ioctl,
+	.release = ouichefs_release,
 };
