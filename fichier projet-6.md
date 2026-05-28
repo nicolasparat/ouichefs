@@ -17,7 +17,7 @@ Pour chaque section ci-dessous, donnez une des indications suivantes :
 - Testé et fonctionnel
 
 ## 1.7 Write-time block reservation
-- Non traité
+- Testé et fonctionnel
 
 ## 1.7.4 Garbage collector
 - Non traité
