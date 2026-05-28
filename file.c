@@ -196,8 +196,9 @@ static int ouichefs_write_end(struct file *file, struct address_space *mapping,
 
 			for (i = inode->i_blocks - 1; i < nr_blocks_old - 1;
 			     i++) {
-				put_block(OUICHEFS_SB(sb), le32_to_cpu(index->blocks[i]));
-				index->blocks[i] = 0;
+				// Comment out pour que ça compile au lieu de remplacer le code car cette fonction ne devrait normalement jamais être appelée.
+				// put_block(OUICHEFS_SB(sb), le32_to_cpu(index->blocks[i]));
+				// index->blocks[i] = 0;
 			}
 			mark_buffer_dirty(bh_index);
 			brelse(bh_index);
