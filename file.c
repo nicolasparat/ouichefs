@@ -728,7 +728,7 @@ static int ouichefs_release(struct inode *inode, struct file *file)
 	pr_info("Reservations at release (start - count) in %s : %u - %u",
 		ci->i_reserved_start,
 		ci->i_reserved_count,
-		file->dentry->d_name
+		file->filename
 	);
 
     if (ci->i_reserved_count > 0) {
