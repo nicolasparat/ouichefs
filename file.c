@@ -471,7 +471,7 @@ static void ouichefs_gc(struct super_block *sb)
     struct ouichefs_sb_info *sbi = OUICHEFS_SB(sb);
     struct inode *inode;
 
-    spin_lock(&sb->s_inode_list_lock);
+    // spin_lock(&sb->s_inode_list_lock);
     list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
         struct ouichefs_inode_info *ci = OUICHEFS_INODE(inode);
         uint32_t i;
@@ -483,7 +483,7 @@ static void ouichefs_gc(struct super_block *sb)
         ci->i_reserved_start = 0;
         ci->i_reserved_count = 0;
     }
-    spin_unlock(&sb->s_inode_list_lock);
+    // spin_unlock(&sb->s_inode_list_lock);
 }
 
 /*
@@ -689,8 +689,8 @@ static int ouichefs_release(struct inode *inode, struct file *file)
     struct ouichefs_sb_info *sbi = OUICHEFS_SB(inode->i_sb);
     uint32_t i;
 
-	pr_info("Reservations at release (start - count) in : %u - %u",
-		// file_dentry(file)->d_name.name,
+	pr_info("Reservations at release (start - count) in %s : %u - %u",
+		file->f_path.dentry->d_name.name,
 		ci->i_reserved_start,
 		ci->i_reserved_count
 	);
