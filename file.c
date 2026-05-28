@@ -466,6 +466,28 @@ static int ouichefs_last_extent(struct ouichefs_extent *extents)
 //     return start;
 // }
 
+static void ouichefs_gc(struct super_block *sb)
+{
+    struct ouichefs_sb_info *sbi = OUICHEFS_SB(sb);
+    struct inode *inode;
+
+    spin_lock(&sb->s_inode_list_lock);
+    list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
+        struct ouichefs_inode_info *ci = OUICHEFS_INODE(inode);
+        uint32_t i;
+
+        if (ci->i_reserved_count == 0)
+            continue;
+        for (i = 0; i < ci->i_reserved_count; i++)
+            put_block(sbi, ci->i_reserved_start + i);
+        ci->i_reserved_start = 0;
+        ci->i_reserved_count = 0;
+    }
+    spin_unlock(&sb->s_inode_list_lock);
+
+    /* TODO 1.8 : sbi->gc_runs++ */
+}
+
 /*
  * Alloue le prochain bloc pour un write en utilisant la fenêtre de
  * réservation. Si la réservation est épuisée, en alloue une nouvelle
@@ -527,28 +549,6 @@ static uint32_t ouichefs_get_next_block(struct super_block *sb,
     }
 
     return bno;
-}
-
-static void ouichefs_gc(struct super_block *sb)
-{
-    struct ouichefs_sb_info *sbi = OUICHEFS_SB(sb);
-    struct inode *inode;
-
-    spin_lock(&sb->s_inode_list_lock);
-    list_for_each_entry(inode, &sb->s_inodes, i_sb_list) {
-        struct ouichefs_inode_info *ci = OUICHEFS_INODE(inode);
-        uint32_t i;
-
-        if (ci->i_reserved_count == 0)
-            continue;
-        for (i = 0; i < ci->i_reserved_count; i++)
-            put_block(sbi, ci->i_reserved_start + i);
-        ci->i_reserved_start = 0;
-        ci->i_reserved_count = 0;
-    }
-    spin_unlock(&sb->s_inode_list_lock);
-
-    /* TODO 1.8 : sbi->gc_runs++ */
 }
 
 static ssize_t ouichefs_write(struct file *file, const char __user *buf,
