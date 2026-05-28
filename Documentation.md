@@ -1,5 +1,6 @@
 # Workflow (from the ouichefs directory)
 
+```
 make clean
 make KERNELDIR=../linux-6.5.7/
 cd mkfs
@@ -13,6 +14,7 @@ cd ../../TME2
 ./qemu-run-asus.sh
 insmod /share/ouichefs.ko
 mount -t ouichefs /dev/sdc /mnt
+```
 
 # Tests
 
