@@ -357,6 +357,57 @@ static ssize_t ouichefs_read(struct file *file, char __user *buf,
     return total;
 }
 
+/* Retourne le nombre de blocs libres consécutifs qu'on a trouvés (possiblement 0) et met l'index du premier bloc consécutif dans block */
+static uint32_t ouichefs_alloc_contiguous(struct super_block *sb,
+                                           uint32_t requested,
+                                           uint32_t *block)
+{
+    struct ouichefs_sb_info *sbi = OUICHEFS_SB(sb);
+    unsigned long *bitmap = sbi->bfree_bitmap;
+    uint32_t nr_blocks = sbi->nr_blocks;
+    uint32_t best_start = 0, best_len = 0;
+    uint32_t cur_start = 0, cur_len = 0;
+    uint32_t i, alloc;
+
+    for (i = 0; i < nr_blocks; i++) {
+		/* bit à 1 (bloc libre) */
+        if (test_bit(i, bitmap)) {
+            if (cur_len == 0)
+                cur_start = i;
+            cur_len++;
+
+            if (cur_len >= requested) {
+                best_start = cur_start;
+                best_len = cur_len;
+                break;
+            }
+        /* bit à 0 (bloc utilisé) */
+        } else {
+            if (cur_len > best_len) {
+                best_len = cur_len;
+                best_start = cur_start;
+            }
+            cur_len = 0;
+        }
+    }
+
+    /* Cas où le meilleur run va jusqu'à la fin du bitmap */
+    if (cur_len > best_len) {
+        best_len = cur_len;
+        best_start = cur_start;
+    }
+
+	/* partition pleine */
+    if (best_len == 0)
+        return 0;
+
+    alloc = min(best_len, requested);
+    bitmap_clear(bitmap, best_start, alloc);
+    sbi->nr_free_blocks -= alloc;
+    *block = best_start;
+    return alloc;
+}
+
 /* Retourne l'index du dernier extent valide ou -1 s'il n'y en a aucun */
 static int ouichefs_last_extent(struct ouichefs_extent *extents)
 {
@@ -373,14 +424,15 @@ static int ouichefs_last_extent(struct ouichefs_extent *extents)
 /* On alloue un bloc avec get_free_block (équivalent de ouichefs_alloc_block de l'énoncé) et met à jour la liste d'extents.
  * Retourne le numéro de bloc physique alloué, ou 0 en cas d'échec. */
 static uint32_t ouichefs_append_block(struct super_block *sb,
-                                       struct ouichefs_extent *extents)
+                                       struct ouichefs_extent *extents,
+									   uint32_t blocks_needed)
 {
     struct ouichefs_sb_info *sbi = OUICHEFS_SB(sb);
     int last_idx;
-    uint32_t bno;
+    uint32_t start, got;
 
-    bno = get_free_block(sbi);
-    if (!bno)
+    got = ouichefs_alloc_contiguous(sb, blocks_needed, &start);
+    if (!got)
         return 0;
 
     last_idx = ouichefs_last_extent(extents);
@@ -388,22 +440,26 @@ static uint32_t ouichefs_append_block(struct super_block *sb,
     /* Merge si contigu avec le dernier extent (et pas un trou) */
     if (last_idx >= 0 &&
         extents[last_idx].start != 0 &&
-        extents[last_idx].start + extents[last_idx].count == bno) {
-        extents[last_idx].count++;
-        return bno;
-    }
+		// Dans cette ligne, le 1er start est le champ de la struct, le 2ème start est la valeur retournée par ouichefs_alloc_contiguous
+		extents[last_idx].start + extents[last_idx].count == start) {
+        extents[last_idx].count += got;
+	} else {
+		// Si ce n'est pas contigu, on alloue un nouvel extent
 
-    /* Nouveau slot */
+		// Si on n'a pas assez d'extents pour l'écriture entière, on libère ceux qu'on vient d'allouer
+		if (last_idx + 1 >= OUICHEFS_MAX_EXTENTS) {
+            uint32_t j;
 
-	/* impossible d'ajouter, libère */
-    if (last_idx + 1 >= OUICHEFS_MAX_EXTENTS) {
-        put_block(sbi, bno); 
-        return 0;
-    }
+            for (j = 0; j < got; j++)
+                put_block(sbi, start + j);
+            return 0;
+        }
 
-    extents[last_idx + 1].start = bno;
-    extents[last_idx + 1].count = 1;
-    return bno;
+        extents[last_idx + 1].start = start;
+        extents[last_idx + 1].count = got;
+	}
+
+    return start;
 }
 
 static ssize_t ouichefs_write(struct file *file, const char __user *buf,
@@ -425,18 +481,23 @@ static ssize_t ouichefs_write(struct file *file, const char __user *buf,
 	}
 
 	/* Check if the write can be completed (enough space?) */
-	if (*ppos > OUICHEFS_MAX_FILESIZE)
-		return -ENOSPC;
+	// NB: J'ai choisi d'utiliser ppos et pas ppos + len car on tronque l'écriture si jamais on ne peut pas tout écrire
+	// Il serait probablement pertinent d'enlever entièrement ce check maintenant qu'on a des extents complets (je regarde ça tout à l'heure si j'y pense)
+	// if (*ppos > OUICHEFS_MAX_FILESIZE)
+	// 	return -ENOSPC;
 
 	loff_t end_pos;
 	end_pos = *ppos + len;
-	nr_allocs = max(end_pos, file->f_inode->i_size) / OUICHEFS_BLOCK_SIZE;
-	if (nr_allocs > file->f_inode->i_blocks - 1)
-		nr_allocs -= file->f_inode->i_blocks - 1;
-	else
-		nr_allocs = 0;
-	if (nr_allocs > sbi->nr_free_blocks)
-		return -ENOSPC;
+
+	// Comment out de nr_allocs pour permettre un write partiel au lieu d'un refus en cas de manque de place (plus cohérent avec la spec)
+	// nr_allocs = max(end_pos, file->f_inode->i_size) / OUICHEFS_BLOCK_SIZE;
+	// // On soustrait 1 car le premier bloc est l'index bloc
+	// if (nr_allocs > file->f_inode->i_blocks - 1)
+	// 	nr_allocs -= file->f_inode->i_blocks - 1;
+	// else
+	// 	nr_allocs = 0;
+	// if (nr_allocs > sbi->nr_free_blocks)
+	// 	return -ENOSPC;
 
     bh_index = sb_bread(sb, ci->index_block);
     if (!bh_index)
@@ -468,8 +529,11 @@ static ssize_t ouichefs_write(struct file *file, const char __user *buf,
         }
 
         if (!bno) {
+			// Nombre de blocs nécessaires pour tout stocker - nombre de blocs déjà alloués
+    		uint32_t blocks_needed = DIV_ROUND_UP(*ppos + len, OUICHEFS_BLOCK_SIZE) - logical_block;
+    		bno = ouichefs_append_block(sb, index->extents, blocks_needed);
             // bno = get_free_block(sbi);
-			bno = ouichefs_append_block(sb, index->extents);
+			// bno = ouichefs_append_block(sb, index->extents);
             if (!bno) {
                 total = total ? total : -ENOSPC;
                 break;
@@ -510,8 +574,7 @@ static ssize_t ouichefs_write(struct file *file, const char __user *buf,
         if (*ppos > inode->i_size) {
             inode->i_size = *ppos;
             /* i_blocks = nb data blocks + 1 (index block) */
-            inode->i_blocks = (roundup(inode->i_size, OUICHEFS_BLOCK_SIZE)
-                               / OUICHEFS_BLOCK_SIZE) + 1;
+            inode->i_blocks = (roundup(inode->i_size, OUICHEFS_BLOCK_SIZE) / OUICHEFS_BLOCK_SIZE) + 1;
         }
     }
 
