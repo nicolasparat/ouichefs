@@ -452,10 +452,10 @@ static ssize_t ouichefs_write(struct file *file, const char __user *buf,
 		// le premier check l'aura catché avant
         // if (logical_block >= OUICHEFS_BLOCK_SIZE >> 2) {
 		// Ce check devra être supprimé/modifié quand on introduira de "vrais" extents
-		if (logical_block >= OUICHEFS_MAX_EXTENTS) {  /* = 512 */
-            total = total ? total : -EFBIG;
-            break;
-        }
+		// if (logical_block >= OUICHEFS_MAX_EXTENTS) {  /* = 512 */
+        //     total = total ? total : -EFBIG;
+        //     break;
+        // }
 
         // bno = le32_to_cpu(index->blocks[logical_block]);
 		// bno = index->extents[logical_block].start;
