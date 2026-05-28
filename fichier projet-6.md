@@ -1,5 +1,5 @@
 # Architecture de la solution
-1 ou 2 paragraphes qui expliquent vite fait vos choix d’implémentation et de design.
+Assez peu à dire à ce stade du projet.
 
 # Travail réalisé
 Pour chaque section ci-dessous, donnez une des indications suivantes :
@@ -8,24 +8,34 @@ Pour chaque section ci-dessous, donnez une des indications suivantes :
 - Non traité
 
 ## 1.2 Reimplementation of the read and the write functions
+- Testé et fonctionnel
 
 ## 1.3 Extent-based index block (1.4 read ; 1.5 write)
+- Testé et fonctionnel
 
 ## 1.6 Contiguous block allocator
+- Testé et fonctionnel
 
 ## 1.7 Write-time block reservation
+- Non traité
 
 ## 1.7.4 Garbage collector
+- Non traité
 
 ## 1.8 Sysfs statistics
+- Non traité
 
 ## 1.9 Sparse files and holes (read)
+- Non traité
 
 ## 1.9 Sparse files and holes (write in hole)
+- Non traité
 
 ## 1.10 Bonus: File defragmentation
+- Non traité
 
 ## 1.11 MEGA Bonus: advanced block allocator
+- Non traité
 
 # Remarques
-Vous pouvez rajouter ici tout ce qui vous paraît pertinent et qui n’apparaît pas dans les autres sections.
+Les tests sont dans Documentation.md
