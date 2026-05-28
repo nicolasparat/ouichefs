@@ -29,8 +29,6 @@ cat test1.txt
 rm test1.txt
 ```
 
-NB: ./test_extents est le programme utilisant l'ioctl pour display les extents.
-
 ```
 <!-- Partition fraîche, écris un fichier de 6 MB (depuis /, pas /mnt) -->
 dd if=/dev/urandom of=/mnt/big.bin bs=1M count=6
@@ -44,4 +42,33 @@ dmesg | tail -5
 md5sum /mnt/big.bin
 cp /mnt/big.bin /tmp/big_copy.bin
 md5sum /tmp/big_copy.bin  <!-- doit matcher -->
+```
+
+NB: ./test_extents est le programme utilisant l'ioctl pour display les extents.
+
+```
+#include <unistd.h>
+#include <stdio.h>
+#include <fcntl.h>
+#include <sys/ioctl.h>
+
+#define OUICHEFS_IOC_MAGIC 'o'
+#define OUICHEFS_IOC_GET_EXTENTS _IO(OUICHEFS_IOC_MAGIC, 1)
+
+int main(int argc, char *argv[])
+{
+    int fd;
+
+    if (argc != 2) {
+        fprintf(stderr, "Usage: %s <fichier>\n", argv[0]);
+        return 1;
+    }
+    fd = open(argv[1], O_RDONLY);
+    if (fd < 0) { perror("open"); return 1; }
+    if (ioctl(fd, OUICHEFS_IOC_GET_EXTENTS) < 0)
+        perror("ioctl");
+    close(fd);
+    printf("Resultat dans dmesg\n");
+    return 0;
+}
 ```
