@@ -21,6 +21,7 @@ Pour chaque section ci-dessous, donnez une des indications suivantes :
 
 ## 1.7.4 Garbage collector
 - Implémenté mais impossible de dire s'il fonctionne : je n'ai pas réussi à faire fonctionner le test
+- Je n'ai mis aucun lock pour l'instant, donc il y aurait des race conditions s'il fonctionnait
 
 ## 1.8 Sysfs statistics
 - Non traité
