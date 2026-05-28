@@ -65,7 +65,7 @@ Test du 1.7
 ```
 ./test_7
 
-<!-- La partition doit être vide pour lancer ce test -->
+<!-- La partition doit être vide pour lancer ce test (il ne marche quand même pas, mais pour une autre raison qui m'est inconnue) -->
 ./test_gc
 ```
 
