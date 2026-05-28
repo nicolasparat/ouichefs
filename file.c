@@ -504,11 +504,15 @@ static uint32_t ouichefs_get_next_block(struct super_block *sb,
     uint32_t bno;
     int last_idx;
 
+	pr_info("z : %u, %u\n", ci->i_reserved_start, ci->i_reserved_count);
+
+	pr_info("ahah")
 	/* Consomme depuis la réservation existante */
     if (ci->i_reserved_count > 0) {
         bno = ci->i_reserved_start;
         ci->i_reserved_start++;
         ci->i_reserved_count--;
+		pr_info("b : %u, %u\n", ci->i_reserved_start, ci->i_reserved_count);
     
 	/* Alloue une nouvelle réserve */
     } else {
@@ -525,6 +529,7 @@ static uint32_t ouichefs_get_next_block(struct super_block *sb,
         /* Les blocs restants sont mis en réserve */
         ci->i_reserved_start = start + 1;
         ci->i_reserved_count = got - 1;
+		pr_info("c : %u, %u\n", ci->i_reserved_start, ci->i_reserved_count);
     }
 
     /* Met à jour la liste d'extents : merge ou nouveau slot */
@@ -547,6 +552,8 @@ static uint32_t ouichefs_get_next_block(struct super_block *sb,
         extents[last_idx].start = bno;
         extents[last_idx].count = 1;
     }
+
+	pr_info("d : %u, %u\n", ci->i_reserved_start, ci->i_reserved_count);
 
     return bno;
 }

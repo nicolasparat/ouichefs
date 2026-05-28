@@ -18,6 +18,8 @@ mount -t ouichefs /dev/sdc /mnt
 
 # Tests
 
+Test du 1.2, 1.3, 1.4 et 1.5
+
 ```
 touch test1.txt
 echo "AAA" > test1.txt
@@ -29,14 +31,16 @@ cat test1.txt
 rm test1.txt
 ```
 
+Test du 1.6
+
 ```
-<!-- Partition fraîche, écris un fichier de 6 MB (depuis /, pas /mnt) -->
+<!-- Partition fraîche, écrit un fichier de 6 MB (depuis /, pas /mnt) -->
 dd if=/dev/urandom of=/mnt/big.bin bs=1M count=6
 
-<!-- Vérifie les extents : avec 1.6, on devrait avoir 1 ou très peu d'extents -->
 ./test_extents /mnt/big.bin
-dmesg | tail -5
+
 <!-- Attendu : 1 extent(s) avec count=1536 (6MB / 4KB) -->
+dmesg | tail -5
 
 <!-- Vérifie l'intégrité -->
 md5sum /mnt/big.bin
@@ -53,6 +57,21 @@ dd if=/dev/urandom of=/mnt/b.bin bs=1M count=6 oflag=append conv=notrunc
 ./test_extents /mnt/b.bin
 
 <!-- Les extends devraient être interleaved. -->
+```
+
+Test du 1.7
+
+```
+dd if=/dev/urandom of=/mnt/a.bin bs=1K count=4
+./test_extents /mnt/a.bin
+dd if=/dev/urandom of=/mnt/b.bin bs=1K count=4
+dd if=/dev/urandom of=/mnt/a.bin bs=1K count=4 oflag=append conv=notrunc
+./test_extents /mnt/a.bin
+<!-- Pas d'augmentation d'extent (toujours 1) -->
+dd if=/dev/urandom of=/mnt/b.bin bs=1K count=400 oflag=append conv=notrunc
+dd if=/dev/urandom of=/mnt/a.bin bs=1K count=400 oflag=append conv=notrunc
+./test_extents /mnt/a.bin
+<!-- Augmentation d'extent (maintenant 2) -->
 ```
 
 NB: ./test_extents est le programme utilisant l'ioctl pour display les extents. Voici son code:
