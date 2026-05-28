@@ -16,7 +16,7 @@
 #define OUICHEFS_BLOCK_SIZE (1 << 12) /* 4 KiB */
 // #define OUICHEFS_MAX_FILESIZE (1 << 22) /* 4 MiB */
 // #define OUICHEFS_MAX_FILESIZE (1 << 21) /* 2 MiB */
-#define OUICHEFS_MAX_FILESIZE (1ULL << 32) /* 4 GiB, pourrait être poussé plus loin mais ça suffit pour notre exemple */
+#define OUICHEFS_MAX_FILESIZE (1ULL << 32) /* 4 GiB, je le garde pour que ça compile mais il ne sert à rien */
 #define OUICHEFS_FILENAME_LEN 28
 #define OUICHEFS_MAX_SUBFILES 128
 
@@ -56,7 +56,6 @@ struct ouichefs_inode {
 
 struct ouichefs_inode_info {
 	uint32_t index_block;
-	// Champs pour plus tard, il pourrait falloir les modifier.
 	uint32_t i_reserved_start;
 	uint32_t i_reserved_count;
 	struct inode vfs_inode;

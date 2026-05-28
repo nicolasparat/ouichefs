@@ -44,7 +44,18 @@ cp /mnt/big.bin /tmp/big_copy.bin
 md5sum /tmp/big_copy.bin  <!-- doit matcher -->
 ```
 
-NB: ./test_extents est le programme utilisant l'ioctl pour display les extents.
+```
+dd if=/dev/urandom of=/mnt/a.bin bs=1M count=6
+dd if=/dev/urandom of=/mnt/b.bin bs=1M count=6
+dd if=/dev/urandom of=/mnt/a.bin bs=1M count=6 oflag=append conv=notrunc
+dd if=/dev/urandom of=/mnt/b.bin bs=1M count=6 oflag=append conv=notrunc
+./test_extents /mnt/a.bin
+./test_extents /mnt/b.bin
+
+<!-- Les extends devraient être interleaved. -->
+```
+
+NB: ./test_extents est le programme utilisant l'ioctl pour display les extents. Voici son code:
 
 ```
 #include <unistd.h>
