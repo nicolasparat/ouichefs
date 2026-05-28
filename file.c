@@ -7,9 +7,6 @@
 
 #define pr_fmt(fmt) "%s:%s: " fmt, KBUILD_MODNAME, __func__
 
-// Possbilement à modifier par la suite
-#define OUICHEFS_HOLE_BLOCK 0xFFFFFFFFU
-
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/fs.h>
@@ -284,7 +281,7 @@ static uint32_t ouichefs_extent_get_block(struct ouichefs_extent *extents,
 		/* Si le bloc logique est dans cet extent */
 		if (logical_block < offset + count) {
 			if (start == 0)
-				return OUICHEFS_HOLE_BLOCK;
+				return 0;
 			return start + (logical_block - offset);
 		}
 
@@ -333,10 +330,6 @@ static ssize_t ouichefs_read(struct file *file, char __user *buf,
 		if (phys_block == 0)
 			/* EOF ou bloc non alloué */
 		    break; 
-		if (phys_block == OUICHEFS_HOLE_BLOCK) {
-		    /* Trou. A gérer par la suite */
-		    break;
-		}
 
         bh_data = sb_bread(sb, phys_block);
         if (!bh_data) {
@@ -583,12 +576,6 @@ static ssize_t ouichefs_write(struct file *file, const char __user *buf,
         // bno = le32_to_cpu(index->blocks[logical_block]);
 		// bno = index->extents[logical_block].start;
 		bno = ouichefs_extent_get_block(index->extents, logical_block);
-
-		if (bno == OUICHEFS_HOLE_BLOCK) {
-            /* Trou (géré plus tard) */
-            total = total ? total : -EIO;
-            break;
-        }
 
         if (!bno) {
     		bno = ouichefs_get_next_block(sb, ci, index->extents);
