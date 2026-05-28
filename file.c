@@ -357,6 +357,55 @@ static ssize_t ouichefs_read(struct file *file, char __user *buf,
     return total;
 }
 
+/* Retourne l'index du dernier extent valide ou -1 s'il n'y en a aucun */
+static int ouichefs_last_extent(struct ouichefs_extent *extents)
+{
+    int i, last = -1;
+
+    for (i = 0; i < OUICHEFS_MAX_EXTENTS; i++) {
+        if (extents[i].count == 0)
+            break;
+        last = i;
+    }
+    return last;
+}
+
+/* On alloue un bloc avec get_free_block (équivalent de ouichefs_alloc_block de l'énoncé) et met à jour la liste d'extents.
+ * Retourne le numéro de bloc physique alloué, ou 0 en cas d'échec. */
+static uint32_t ouichefs_append_block(struct super_block *sb,
+                                       struct ouichefs_extent *extents)
+{
+    struct ouichefs_sb_info *sbi = OUICHEFS_SB(sb);
+    int last_idx;
+    uint32_t bno;
+
+    bno = get_free_block(sbi);
+    if (!bno)
+        return 0;
+
+    last_idx = ouichefs_last_extent(extents);
+
+    /* Merge si contigu avec le dernier extent (et pas un trou) */
+    if (last_idx >= 0 &&
+        extents[last_idx].start != 0 &&
+        extents[last_idx].start + extents[last_idx].count == bno) {
+        extents[last_idx].count++;
+        return bno;
+    }
+
+    /* Nouveau slot */
+
+	/* impossible d'ajouter, libère */
+    if (last_idx + 1 >= OUICHEFS_MAX_EXTENTS) {
+        put_block(sbi, bno); 
+        return 0;
+    }
+
+    extents[last_idx + 1].start = bno;
+    extents[last_idx + 1].count = 1;
+    return bno;
+}
+
 static ssize_t ouichefs_write(struct file *file, const char __user *buf,
                                size_t len, loff_t *ppos)
 {
@@ -402,22 +451,32 @@ static ssize_t ouichefs_write(struct file *file, const char __user *buf,
 		// Check par sécurité, normalement jamais utilisé car 
 		// le premier check l'aura catché avant
         // if (logical_block >= OUICHEFS_BLOCK_SIZE >> 2) {
+		// Ce check devra être supprimé/modifié quand on introduira de "vrais" extents
 		if (logical_block >= OUICHEFS_MAX_EXTENTS) {  /* = 512 */
             total = total ? total : -EFBIG;
             break;
         }
 
         // bno = le32_to_cpu(index->blocks[logical_block]);
-		bno = index->extents[logical_block].start;
+		// bno = index->extents[logical_block].start;
+		bno = ouichefs_extent_get_block(index->extents, logical_block);
+
+		if (bno == OUICHEFS_HOLE_BLOCK) {
+            /* Trou (géré plus tard) */
+            total = total ? total : -EIO;
+            break;
+        }
+
         if (!bno) {
-            bno = get_free_block(sbi);
+            // bno = get_free_block(sbi);
+			bno = ouichefs_append_block(sb, index->extents);
             if (!bno) {
                 total = total ? total : -ENOSPC;
                 break;
             }
             // index->blocks[logical_block] = cpu_to_le32(bno);
-			index->extents[logical_block].start = bno;
-			index->extents[logical_block].count = 1;
+			// index->extents[logical_block].start = bno;
+			// index->extents[logical_block].count = 1;
 
             mark_buffer_dirty(bh_index);
         }
