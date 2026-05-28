@@ -377,19 +377,6 @@ static int ouichefs_unlink(struct inode *dir, struct dentry *dentry)
 
 	/* Libère la réservation en mémoire lors de la fermeture du fichier */
 	if (inode->i_nlink <= 1 || (S_ISDIR(inode->i_mode) && inode->i_nlink <= 2)) {
-	    // struct ouichefs_inode_info *ci_file = OUICHEFS_INODE(inode);
-	    // uint32_t start, count, j;
-
-	    // spin_lock(&inode->i_lock);
-	    // start = ci_file->i_reserved_start;
-	    // count = ci_file->i_reserved_count;
-	    // ci_file->i_reserved_start = 0;
-	    // ci_file->i_reserved_count = 0;
-	    // spin_unlock(&inode->i_lock);
-
-	    // for (j = 0; j < count; j++)
-	    //     ouichefs_free_block(sb, start + j);
-
 		struct ouichefs_inode_info *ci_file = OUICHEFS_INODE(inode);
 	    uint32_t j;
 

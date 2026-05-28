@@ -484,8 +484,6 @@ static void ouichefs_gc(struct super_block *sb)
         ci->i_reserved_count = 0;
     }
     spin_unlock(&sb->s_inode_list_lock);
-
-    /* TODO 1.8 : sbi->gc_runs++ */
 }
 
 /*
@@ -569,12 +567,6 @@ static ssize_t ouichefs_write(struct file *file, const char __user *buf,
     	*ppos = inode->i_size;
 	}
 
-	/* Check if the write can be completed (enough space?) */
-	// NB: J'ai choisi d'utiliser ppos et pas ppos + len car on tronque l'écriture si jamais on ne peut pas tout écrire
-	// Il serait probablement pertinent d'enlever entièrement ce check maintenant qu'on a des extents complets (je regarde ça tout à l'heure si j'y pense)
-	// if (*ppos > OUICHEFS_MAX_FILESIZE)
-	// 	return -ENOSPC;
-
 	loff_t end_pos;
 	end_pos = *ppos + len;
 
@@ -598,15 +590,6 @@ static ssize_t ouichefs_write(struct file *file, const char __user *buf,
         block_offset  = *ppos % OUICHEFS_BLOCK_SIZE;
         to_copy = min_t(size_t, len, OUICHEFS_BLOCK_SIZE - block_offset);
 
-		// Check par sécurité, normalement jamais utilisé car 
-		// le premier check l'aura catché avant
-        // if (logical_block >= OUICHEFS_BLOCK_SIZE >> 2) {
-		// Ce check devra être supprimé/modifié quand on introduira de "vrais" extents
-		// if (logical_block >= OUICHEFS_MAX_EXTENTS) {  /* = 512 */
-        //     total = total ? total : -EFBIG;
-        //     break;
-        // }
-
         // bno = le32_to_cpu(index->blocks[logical_block]);
 		// bno = index->extents[logical_block].start;
 		bno = ouichefs_extent_get_block(index->extents, logical_block);
@@ -618,8 +601,6 @@ static ssize_t ouichefs_write(struct file *file, const char __user *buf,
         }
 
         if (!bno) {
-			// Nombre de blocs nécessaires pour tout stocker - nombre de blocs déjà alloués
-    		// uint32_t blocks_needed = DIV_ROUND_UP(*ppos + len, OUICHEFS_BLOCK_SIZE) - logical_block;
     		bno = ouichefs_get_next_block(sb, ci, index->extents);
             // bno = get_free_block(sbi);
 			// bno = ouichefs_append_block(sb, index->extents);
@@ -639,13 +620,6 @@ static ssize_t ouichefs_write(struct file *file, const char __user *buf,
             total = total ? total : -EIO;
             break;
         }
-
-		// On ne remplit pas les blocs "skippés" actuellement, mais il faudra sûrement le faire ensuite.
-		/* Zero-fill if we're writing past the current block end (hole) */
-        // if (block_offset > 0 && *ppos > inode->i_size) {
-        //     uint32_t gap = min_t(uint32_t, block_offset, inode->i_size % OUICHEFS_BLOCK_SIZE);
-        //     /* memset the gap to zero — simplified, you may need to be more careful */
-        // }
 
         if (copy_from_user(bh_data->b_data + block_offset, buf + total, to_copy)) {
             brelse(bh_data);
