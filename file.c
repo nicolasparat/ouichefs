@@ -467,13 +467,13 @@ static ssize_t ouichefs_write(struct file *file, const char __user *buf,
 {
     struct inode *inode = file_inode(file);
     struct ouichefs_inode_info *ci = OUICHEFS_INODE(inode);
-    struct ouichefs_sb_info *sbi = OUICHEFS_SB(inode->i_sb);
+    // struct ouichefs_sb_info *sbi = OUICHEFS_SB(inode->i_sb);
     struct super_block *sb = inode->i_sb;
     struct buffer_head *bh_index, *bh_data;
     struct ouichefs_file_index_block *index;
     ssize_t total = 0;
     uint32_t logical_block, block_offset, to_copy, bno;
-	uint32_t nr_allocs = 0;
+	// uint32_t nr_allocs = 0;
 
 	/* Curseur à la fin du fichier si on est en mode APPEND */
     if (file->f_flags & O_APPEND) {
