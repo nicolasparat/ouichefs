@@ -570,16 +570,6 @@ static ssize_t ouichefs_write(struct file *file, const char __user *buf,
 	loff_t end_pos;
 	end_pos = *ppos + len;
 
-	// Comment out de nr_allocs pour permettre un write partiel au lieu d'un refus en cas de manque de place (plus cohérent avec la spec)
-	// nr_allocs = max(end_pos, file->f_inode->i_size) / OUICHEFS_BLOCK_SIZE;
-	// // On soustrait 1 car le premier bloc est l'index bloc
-	// if (nr_allocs > file->f_inode->i_blocks - 1)
-	// 	nr_allocs -= file->f_inode->i_blocks - 1;
-	// else
-	// 	nr_allocs = 0;
-	// if (nr_allocs > sbi->nr_free_blocks)
-	// 	return -ENOSPC;
-
     bh_index = sb_bread(sb, ci->index_block);
     if (!bh_index)
         return -EIO;
