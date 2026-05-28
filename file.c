@@ -506,7 +506,7 @@ static uint32_t ouichefs_get_next_block(struct super_block *sb,
 
 	pr_info("z : %u, %u\n", ci->i_reserved_start, ci->i_reserved_count);
 
-	pr_info("ahah")
+	pr_info("ahah");
 	/* Consomme depuis la réservation existante */
     if (ci->i_reserved_count > 0) {
         bno = ci->i_reserved_start;
