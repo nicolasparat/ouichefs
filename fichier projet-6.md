@@ -1,5 +1,5 @@
 # Architecture de la solution
-Assez peu à dire à ce stade du projet.
+
 
 # Travail réalisé
 Pour chaque section ci-dessous, donnez une des indications suivantes :
@@ -20,7 +20,7 @@ Pour chaque section ci-dessous, donnez une des indications suivantes :
 - Testé et fonctionnel
 
 ## 1.7.4 Garbage collector
-- Non traité
+- Implémenté mais impossible de dire s'il fonctionne : je n'ai pas réussi à faire fonctionner le test
 
 ## 1.8 Sysfs statistics
 - Non traité

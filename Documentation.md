@@ -64,6 +64,9 @@ Test du 1.7
 
 ```
 ./test_7
+
+<!-- La partition doit être vide pour lancer ce test -->
+./test_gc
 ```
 
-NB : Les programmes exécutés pour les tests (comme ./test_extents et ./test_7) sont dans le répertoire /tests et doivent être compilés et exécutés dans le root de la VM pour faire le test.
+NB : Les programmes exécutés pour les tests (comme ./test_extents et ./test_7) sont dans le répertoire /tests et doivent être déplacés, compilés et exécutés dans le root de la VM pour faire le test.

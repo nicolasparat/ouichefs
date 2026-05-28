@@ -281,7 +281,7 @@ static uint32_t ouichefs_extent_get_block(struct ouichefs_extent *extents,
 		/* Si le bloc logique est dans cet extent */
 		if (logical_block < offset + count) {
 			if (start == 0)
-				return 0;
+				return 0; // On ne gère pas les trous pour l'instant
 			return start + (logical_block - offset);
 		}
 
